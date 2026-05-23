@@ -22,6 +22,8 @@ def make_pose_env(
     terminate_on_reference_end: bool,
     noise_type: str,
     jitter_sigma: float,
+    dropout_p: float,
+    dropout_mode: str,
 ):
     def _init():
         data = np.load(reference_path, allow_pickle=True)
@@ -35,6 +37,8 @@ def make_pose_env(
             terminate_on_reference_end=terminate_on_reference_end,
             noise_type=noise_type,
             jitter_sigma=jitter_sigma,
+            dropout_p=dropout_p,
+            dropout_mode=dropout_mode,
             seed=seed,
         )
         env.reset(seed=seed)
@@ -52,6 +56,8 @@ def evaluate_model(
     episodes: int,
     noise_type: str = "clean",
     jitter_sigma: float = 0.0,
+    dropout_p: float = 0.0,
+    dropout_mode: str = "hold",
 ):
     data = np.load(reference_path, allow_pickle=True)
     reference_keypoints = data["keypoints"]
@@ -70,6 +76,8 @@ def evaluate_model(
             terminate_on_reference_end=True,
             noise_type=noise_type,
             jitter_sigma=jitter_sigma,
+            dropout_p=dropout_p,
+            dropout_mode=dropout_mode,
             seed=seed + ep,
         )
 
@@ -120,8 +128,10 @@ def main():
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--device", type=str, default="auto")
     parser.add_argument("--eval-episodes", type=int, default=5)
-    parser.add_argument("--noise-type", type=str, default="clean", choices=["clean", "jitter"])
+    parser.add_argument("--noise-type", type=str, default="clean", choices=["clean", "jitter", "dropout"])
     parser.add_argument("--jitter-sigma", type=float, default=0.0)
+    parser.add_argument("--dropout-p", type=float, default=0.0)
+    parser.add_argument("--dropout-mode", type=str, default="hold", choices=["hold", "zero", "mask"])
     args = parser.parse_args()
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -135,6 +145,8 @@ def main():
             terminate_on_reference_end=True,
             noise_type=args.noise_type,
             jitter_sigma=args.jitter_sigma,
+            dropout_p=args.dropout_p,
+            dropout_mode=args.dropout_mode,
         )
     ])
     env = VecMonitor(env)
@@ -171,6 +183,8 @@ def main():
         episodes=args.eval_episodes,
         noise_type="clean",
         jitter_sigma=0.0,
+        dropout_p=0.0,
+        dropout_mode="hold",
     )
 
     metrics.update({
@@ -181,6 +195,8 @@ def main():
         "alpha": args.alpha,
         "noise_type": args.noise_type,
         "jitter_sigma": args.jitter_sigma,
+        "dropout_p": args.dropout_p,
+        "dropout_mode": args.dropout_mode,
         "policy_path": str(model_path),
     })
 
