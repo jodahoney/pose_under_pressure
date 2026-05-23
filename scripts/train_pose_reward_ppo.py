@@ -20,6 +20,8 @@ def make_pose_env(
     seed: int,
     alpha: float,
     terminate_on_reference_end: bool,
+    noise_type: str,
+    jitter_sigma: float,
 ):
     def _init():
         data = np.load(reference_path, allow_pickle=True)
@@ -31,6 +33,9 @@ def make_pose_env(
             reference_keypoints=reference_keypoints,
             alpha=alpha,
             terminate_on_reference_end=terminate_on_reference_end,
+            noise_type=noise_type,
+            jitter_sigma=jitter_sigma,
+            seed=seed,
         )
         env.reset(seed=seed)
         return env
@@ -45,6 +50,8 @@ def evaluate_model(
     seed: int,
     alpha: float,
     episodes: int,
+    noise_type: str = "clean",
+    jitter_sigma: float = 0.0,
 ):
     data = np.load(reference_path, allow_pickle=True)
     reference_keypoints = data["keypoints"]
@@ -61,6 +68,9 @@ def evaluate_model(
             reference_keypoints=reference_keypoints,
             alpha=alpha,
             terminate_on_reference_end=True,
+            noise_type=noise_type,
+            jitter_sigma=jitter_sigma,
+            seed=seed + ep,
         )
 
         obs, info = env.reset(seed=seed + ep)
@@ -110,6 +120,8 @@ def main():
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--device", type=str, default="auto")
     parser.add_argument("--eval-episodes", type=int, default=5)
+    parser.add_argument("--noise-type", type=str, default="clean", choices=["clean", "jitter"])
+    parser.add_argument("--jitter-sigma", type=float, default=0.0)
     args = parser.parse_args()
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -121,6 +133,8 @@ def main():
             seed=args.seed,
             alpha=args.alpha,
             terminate_on_reference_end=True,
+            noise_type=args.noise_type,
+            jitter_sigma=args.jitter_sigma,
         )
     ])
     env = VecMonitor(env)
@@ -155,6 +169,8 @@ def main():
         seed=args.seed + 10_000,
         alpha=args.alpha,
         episodes=args.eval_episodes,
+        noise_type="clean",
+        jitter_sigma=0.0,
     )
 
     metrics.update({
@@ -163,6 +179,8 @@ def main():
         "seed": args.seed,
         "total_steps": args.total_steps,
         "alpha": args.alpha,
+        "noise_type": args.noise_type,
+        "jitter_sigma": args.jitter_sigma,
         "policy_path": str(model_path),
     })
 
