@@ -1,0 +1,10 @@
+numpy
+pandas
+matplotlib
+scipy
+torch
+gymnasium[mujoco]
+pyyaml
+tqdm
+stable-baselines3>=2.8.0
+tensorboard
