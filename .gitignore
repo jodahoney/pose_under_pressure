@@ -12,3 +12,10 @@ outputs/alignment/
 outputs/figures/
 
 wandb/
+
+# Experiment artifacts: keep final summaries/figures, ignore heavy per-run outputs
+results/*/
+!results/figures/
+results/figures/.DS_Store
+*.zip
+events.out.tfevents.*

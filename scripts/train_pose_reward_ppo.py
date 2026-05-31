@@ -6,8 +6,10 @@ from pathlib import Path
 
 import gymnasium as gym
 import numpy as np
+import pandas as pd
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecMonitor
+from stable_baselines3.common.callbacks import BaseCallback
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
@@ -126,7 +128,74 @@ CONDITION_PRESETS = {
         "bias_target": "none",
         "reward_type": "huber",
     },
+    "compound_zero_moderate": {
+        "noise_type": "compound",
+        "jitter_sigma": 0.05,
+        "dropout_p": 0.30,
+        "dropout_mode": "zero",
+        "use_masked_reward": False,
+        "bias_magnitude": 0.05,
+        "bias_axis": 0,
+        "bias_target": "feet",
+        "reward_type": "squared",
+    },
+    "compound_masked_moderate": {
+        "noise_type": "compound",
+        "jitter_sigma": 0.05,
+        "dropout_p": 0.30,
+        "dropout_mode": "mask",
+        "use_masked_reward": True,
+        "bias_magnitude": 0.05,
+        "bias_axis": 0,
+        "bias_target": "feet",
+        "reward_type": "squared",
+    },
 }
+
+
+class TrainingCsvCallback(BaseCallback):
+    """
+    Lightweight callback that saves rollout-level training diagnostics to CSV.
+
+    Uses SB3's episode info buffer for reward/length because logger values are
+    not always populated when _on_rollout_end is called.
+    """
+
+    def __init__(self, out_path: Path, verbose: int = 0):
+        super().__init__(verbose)
+        self.out_path = out_path
+        self.rows = []
+
+    def _on_step(self) -> bool:
+        return True
+
+    def _on_rollout_end(self) -> None:
+        values = self.model.logger.name_to_value
+
+        ep_infos = list(self.model.ep_info_buffer)
+        if len(ep_infos) > 0:
+            ep_rew_mean = float(np.mean([ep_info["r"] for ep_info in ep_infos]))
+            ep_len_mean = float(np.mean([ep_info["l"] for ep_info in ep_infos]))
+        else:
+            ep_rew_mean = np.nan
+            ep_len_mean = np.nan
+
+        row = {
+            "num_timesteps": int(self.num_timesteps),
+            "rollout_ep_rew_mean": ep_rew_mean,
+            "rollout_ep_len_mean": ep_len_mean,
+            "train_approx_kl": values.get("train/approx_kl", np.nan),
+            "train_clip_fraction": values.get("train/clip_fraction", np.nan),
+            "train_entropy_loss": values.get("train/entropy_loss", np.nan),
+            "train_explained_variance": values.get("train/explained_variance", np.nan),
+            "train_loss": values.get("train/loss", np.nan),
+            "train_policy_gradient_loss": values.get("train/policy_gradient_loss", np.nan),
+            "train_value_loss": values.get("train/value_loss", np.nan),
+        }
+
+        self.rows.append(row)
+        self.out_path.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(self.rows).to_csv(self.out_path, index=False)
 
 
 def apply_condition_preset(args):
@@ -520,7 +589,9 @@ def main():
         learning_rate=3e-4,
     )
 
-    model.learn(total_timesteps=args.total_steps)
+    training_curve_path = args.out_dir / "training_curve.csv"
+    callback = TrainingCsvCallback(training_curve_path)
+    model.learn(total_timesteps=args.total_steps, callback=callback)
 
     model_path = args.out_dir / "policy.zip"
     model.save(model_path)

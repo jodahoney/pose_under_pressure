@@ -8,7 +8,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
-from src.envs.keypoints import DEFAULT_WALKER2D_BODIES, get_walker2d_keypoints
+from src.envs.keypoints import get_default_body_names, get_keypoints
 
 
 def load_policy(policy_path: Path | None):
@@ -38,8 +38,10 @@ def collect_reference(
     reward_list = []
     keypoint_list = []
 
+    body_names = get_default_body_names(env)
+
     for _ in range(max_steps):
-        keypoints = get_walker2d_keypoints(env)
+        keypoints = get_keypoints(env)
 
         if policy is None:
             action = env.action_space.sample()
@@ -66,7 +68,7 @@ def collect_reference(
         actions=np.asarray(action_list, dtype=np.float32),
         env_rewards=np.asarray(reward_list, dtype=np.float32),
         keypoints=np.asarray(keypoint_list, dtype=np.float32),
-        body_names=np.asarray(DEFAULT_WALKER2D_BODIES),
+        body_names=np.asarray(body_names),
         env_name=env_name,
         seed=seed,
         policy_path=str(policy_path) if policy_path is not None else "",
@@ -74,9 +76,11 @@ def collect_reference(
     )
 
     print(f"Saved reference to {out_path}")
+    print(f"Environment: {env_name}")
     print(f"Steps: {len(obs_list)}")
     print(f"Total env reward: {np.sum(reward_list):.3f}")
     print(f"Mean env reward: {np.mean(reward_list):.3f}")
+    print(f"Body names: {body_names}")
     print(f"Keypoints shape: {np.asarray(keypoint_list).shape}")
 
 

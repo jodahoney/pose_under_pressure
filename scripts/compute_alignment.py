@@ -11,7 +11,7 @@ from stable_baselines3 import PPO
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
 
-from src.envs.keypoints import get_walker2d_keypoints
+from src.envs.keypoints import get_keypoints
 from src.rewards.corruptions import (
     add_gaussian_jitter,
     apply_keypoint_dropout,
@@ -116,6 +116,28 @@ CONDITION_PRESETS = {
         "dropout_mode": "hold",
         "use_masked_reward": False,
         "bias_magnitude": 0.10,
+        "bias_axis": 0,
+        "bias_target": "feet",
+        "reward_type": "squared",
+    },
+    "compound_zero_moderate": {
+        "noise_type": "compound",
+        "jitter_sigma": 0.05,
+        "dropout_p": 0.30,
+        "dropout_mode": "zero",
+        "use_masked_reward": False,
+        "bias_magnitude": 0.05,
+        "bias_axis": 0,
+        "bias_target": "feet",
+        "reward_type": "squared",
+    },
+    "compound_masked_moderate": {
+        "noise_type": "compound",
+        "jitter_sigma": 0.05,
+        "dropout_p": 0.30,
+        "dropout_mode": "mask",
+        "use_masked_reward": True,
+        "bias_magnitude": 0.05,
         "bias_axis": 0,
         "bias_target": "feet",
         "reward_type": "squared",
@@ -345,7 +367,7 @@ def compute_alignment(
             action, _ = model.predict(obs, deterministic=True)
             obs, env_reward, terminated, truncated, info = env.step(action)
 
-            clean_keypoints = get_walker2d_keypoints(env)
+            clean_keypoints = get_keypoints(env)
             ref_keypoints = reference_keypoints[t]
 
             noisy_keypoints, visibility_mask = corrupt_keypoints(

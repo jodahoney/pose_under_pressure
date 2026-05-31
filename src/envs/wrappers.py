@@ -3,7 +3,7 @@ from __future__ import annotations
 import gymnasium as gym
 import numpy as np
 
-from src.envs.keypoints import get_walker2d_keypoints
+from src.envs.keypoints import get_default_body_names, get_keypoints
 from src.rewards.corruptions import (
     add_gaussian_jitter,
     apply_keypoint_dropout,
@@ -92,29 +92,15 @@ class PoseRewardWrapper(gym.Wrapper):
 
     def _get_keypoint_names(self) -> list[str]:
         """
-        Best-effort helper for selecting biased keypoints by MuJoCo body name.
-
-        This may not perfectly align with get_walker2d_keypoints if the keypoint
-        extractor uses a custom subset/order. The fallback index rules below
-        keep the experiment runnable even if names do not align.
+        Return the keypoint names in the exact order used by get_keypoints.
         """
-        model = self.env.unwrapped.model
-        names = []
-
-        for i in range(model.nbody):
-            try:
-                name = model.body(i).name
-            except Exception:
-                name = ""
-            names.append(name)
-
-        return names
+        return get_default_body_names(self.env)
 
     def _select_bias_indices(self, keypoints: np.ndarray) -> list[int]:
         """
         Select which keypoints receive systematic bias.
 
-        Walker2d keypoint order from get_walker2d_keypoints:
+        Walker2d keypoint order:
             0 torso
             1 thigh
             2 leg
@@ -122,6 +108,12 @@ class PoseRewardWrapper(gym.Wrapper):
             4 thigh_left
             5 leg_left
             6 foot_left
+
+        Hopper keypoint order:
+            0 torso
+            1 thigh
+            2 leg
+            3 foot
         """
         num_keypoints = keypoints.shape[0]
 
@@ -131,6 +123,7 @@ class PoseRewardWrapper(gym.Wrapper):
         if self.bias_target == "all":
             return list(range(num_keypoints))
 
+        # Walker2d-v5
         if num_keypoints == 7:
             if self.bias_target == "feet":
                 return [3, 6]
@@ -141,7 +134,18 @@ class PoseRewardWrapper(gym.Wrapper):
             if self.bias_target == "torso":
                 return [0]
 
-        # Generic fallbacks for non-Walker2d keypoint arrays.
+        # Hopper-v5
+        if num_keypoints == 4:
+            if self.bias_target == "feet":
+                return [3]
+
+            if self.bias_target == "legs":
+                return [1, 2, 3]
+
+            if self.bias_target == "torso":
+                return [0]
+
+        # Generic fallbacks.
         if self.bias_target == "feet":
             return list(range(max(0, num_keypoints - 2), num_keypoints))
 
@@ -163,20 +167,12 @@ class PoseRewardWrapper(gym.Wrapper):
         if self.bias_target == "none" or self.bias_magnitude == 0.0:
             return
 
-        walker2d_names = [
-            "torso",
-            "thigh",
-            "leg",
-            "foot",
-            "thigh_left",
-            "leg_left",
-            "foot_left",
-        ]
+        keypoint_names = self._get_keypoint_names()
 
         selected_names = []
         for idx in bias_indices:
-            if keypoints.shape[0] == 7 and 0 <= idx < len(walker2d_names):
-                selected_names.append(walker2d_names[idx])
+            if 0 <= idx < len(keypoint_names):
+                selected_names.append(keypoint_names[idx])
             else:
                 selected_names.append(f"keypoint_{idx}")
 
@@ -317,11 +313,18 @@ class PoseRewardWrapper(gym.Wrapper):
     def step(self, action):
         obs, env_reward, terminated, truncated, info = self.env.step(action)
 
-        clean_agent_keypoints = get_walker2d_keypoints(self.env)
+        clean_agent_keypoints = get_keypoints(self.env)
         reward_keypoints, visibility_mask = self._corrupt_keypoints(clean_agent_keypoints)
 
         ref_t = min(self.t, len(self.reference_keypoints) - 1)
         ref_keypoints = self.reference_keypoints[ref_t]
+
+        if clean_agent_keypoints.shape != ref_keypoints.shape:
+            raise ValueError(
+                "Agent keypoints and reference keypoints have different shapes. "
+                f"Agent: {clean_agent_keypoints.shape}, reference: {ref_keypoints.shape}. "
+                "Check that the reference trajectory was collected from the same environment."
+            )
 
         imitation_reward = self._compute_pose_reward(
             reward_keypoints=reward_keypoints,

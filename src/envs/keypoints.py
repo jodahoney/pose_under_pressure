@@ -13,6 +13,23 @@ DEFAULT_WALKER2D_BODIES = [
     "foot_left",
 ]
 
+DEFAULT_HOPPER_BODIES = [
+    "torso",
+    "thigh",
+    "leg",
+    "foot",
+]
+
+
+def get_env_id(env) -> str:
+    """
+    Return the Gymnasium environment id when available.
+    """
+    spec = getattr(env.unwrapped, "spec", None)
+    if spec is not None and getattr(spec, "id", None) is not None:
+        return spec.id
+    return env.unwrapped.__class__.__name__
+
 
 def get_mujoco_body_names(env) -> list[str]:
     """
@@ -36,6 +53,14 @@ def get_body_positions(env, body_names: list[str]) -> np.ndarray:
     model = env.unwrapped.model
     data = env.unwrapped.data
 
+    available = set(get_mujoco_body_names(env))
+    missing = [name for name in body_names if name not in available]
+    if missing:
+        raise ValueError(
+            f"Requested body names are missing from {get_env_id(env)}: {missing}. "
+            f"Available bodies: {sorted(available)}"
+        )
+
     positions = []
     for name in body_names:
         body_id = model.body(name).id
@@ -52,8 +77,8 @@ def root_relative_keypoints(
     """
     Convert absolute MuJoCo body positions into root-relative keypoints.
 
-    MuJoCo positions are [x, y, z]. Walker2d is effectively planar, so we
-    keep x and z by default.
+    MuJoCo positions are [x, y, z]. Walker2d and Hopper are effectively
+    planar, so we keep x and z by default.
 
     Args:
         positions: array of shape [K, 3].
@@ -75,8 +100,17 @@ def get_walker2d_keypoints(
     """
     Extract Walker2d body keypoints from the current simulator state.
 
+    Default keypoint order:
+        0 torso
+        1 thigh
+        2 leg
+        3 foot
+        4 thigh_left
+        5 leg_left
+        6 foot_left
+
     Returns:
-        keypoints: array of shape [K, 2] if root_relative=True.
+        keypoints: array of shape [7, 2] if root_relative=True.
     """
     if body_names is None:
         body_names = DEFAULT_WALKER2D_BODIES
@@ -87,3 +121,74 @@ def get_walker2d_keypoints(
         return root_relative_keypoints(positions)
 
     return positions.astype(np.float32)
+
+
+def get_hopper_keypoints(
+    env,
+    body_names: list[str] | None = None,
+    root_relative: bool = True,
+) -> np.ndarray:
+    """
+    Extract Hopper body keypoints from the current simulator state.
+
+    Default keypoint order:
+        0 torso
+        1 thigh
+        2 leg
+        3 foot
+
+    Returns:
+        keypoints: array of shape [4, 2] if root_relative=True.
+    """
+    if body_names is None:
+        body_names = DEFAULT_HOPPER_BODIES
+
+    positions = get_body_positions(env, body_names)
+
+    if root_relative:
+        return root_relative_keypoints(positions)
+
+    return positions.astype(np.float32)
+
+
+def get_keypoints(
+    env,
+    root_relative: bool = True,
+) -> np.ndarray:
+    """
+    Environment-aware keypoint extractor.
+
+    Supported environments:
+        Walker2d-v5
+        Hopper-v5
+    """
+    env_id = get_env_id(env)
+
+    if "Walker2d" in env_id:
+        return get_walker2d_keypoints(env, root_relative=root_relative)
+
+    if "Hopper" in env_id:
+        return get_hopper_keypoints(env, root_relative=root_relative)
+
+    raise ValueError(
+        f"Unsupported environment for pose keypoints: {env_id}. "
+        "Expected an environment id containing 'Walker2d' or 'Hopper'."
+    )
+
+
+def get_default_body_names(env) -> list[str]:
+    """
+    Return the default body/keypoint names used by get_keypoints for this env.
+    """
+    env_id = get_env_id(env)
+
+    if "Walker2d" in env_id:
+        return list(DEFAULT_WALKER2D_BODIES)
+
+    if "Hopper" in env_id:
+        return list(DEFAULT_HOPPER_BODIES)
+
+    raise ValueError(
+        f"Unsupported environment for default body names: {env_id}. "
+        "Expected an environment id containing 'Walker2d' or 'Hopper'."
+    )
