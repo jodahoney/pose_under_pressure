@@ -19,8 +19,10 @@ def add_gaussian_jitter(
     Returns:
         Corrupted keypoints with same shape as input.
     """
+    keypoints = keypoints.astype(np.float32)
+
     if sigma <= 0:
-        return keypoints.astype(np.float32)
+        return keypoints.copy()
 
     noise = rng.normal(loc=0.0, scale=sigma, size=keypoints.shape)
     return (keypoints + noise).astype(np.float32)
@@ -50,34 +52,76 @@ def apply_keypoint_dropout(
         corrupted_keypoints: array of shape [K, D].
         visibility_mask: array of shape [K], where 1 means visible and 0 means dropped.
     """
-    if p_drop <= 0:
-        mask = np.ones(keypoints.shape[0], dtype=np.float32)
-        return keypoints.astype(np.float32), mask
+    keypoints = keypoints.astype(np.float32)
 
     if not 0 <= p_drop <= 1:
         raise ValueError(f"p_drop must be in [0, 1], got {p_drop}")
 
+    if mode not in {"hold", "zero", "mask"}:
+        raise ValueError(f"Unknown dropout mode: {mode}")
+
+    if p_drop <= 0:
+        mask = np.ones(keypoints.shape[0], dtype=np.float32)
+        return keypoints.copy(), mask
+
     visible = rng.random(keypoints.shape[0]) > p_drop
     mask = visible.astype(np.float32)
 
-    corrupted = keypoints.copy().astype(np.float32)
+    corrupted = keypoints.copy()
 
     if mode == "hold":
         if previous_keypoints is None:
             replacement = keypoints
         else:
-            replacement = previous_keypoints
+            replacement = previous_keypoints.astype(np.float32)
+
+        if replacement.shape != keypoints.shape:
+            raise ValueError(
+                "previous_keypoints must have the same shape as keypoints, "
+                f"got previous_keypoints={replacement.shape}, keypoints={keypoints.shape}"
+            )
+
         corrupted[~visible] = replacement[~visible]
 
     elif mode == "zero":
         corrupted[~visible] = 0.0
 
     elif mode == "mask":
-        # For the raw dropout condition, this behaves like no coordinate change.
-        # The mask is returned so masked rewards can be added later.
+        # Leave coordinates unchanged. The returned mask is used by the reward
+        # function to ignore dropped keypoints.
         pass
 
-    else:
-        raise ValueError(f"Unknown dropout mode: {mode}")
-
     return corrupted.astype(np.float32), mask
+
+
+def add_systematic_bias(
+    keypoints: np.ndarray,
+    bias_indices: list[int] | np.ndarray,
+    bias_magnitude: float,
+    bias_axis: int = 0,
+) -> np.ndarray:
+    """
+    Add a fixed offset to selected keypoints.
+
+    Args:
+        keypoints: array of shape [K, D].
+        bias_indices: keypoint indices to corrupt.
+        bias_magnitude: scalar offset applied to selected keypoints.
+        bias_axis: coordinate axis to offset.
+
+    Returns:
+        Biased keypoints with same shape as input.
+    """
+    keypoints = keypoints.astype(np.float32)
+    corrupted = keypoints.copy()
+
+    if bias_magnitude == 0.0 or len(bias_indices) == 0:
+        return corrupted
+
+    if bias_axis < 0 or bias_axis >= corrupted.shape[1]:
+        raise ValueError(
+            f"bias_axis={bias_axis} is invalid for keypoint dimension {corrupted.shape[1]}"
+        )
+
+    corrupted[np.asarray(bias_indices, dtype=int), bias_axis] += bias_magnitude
+    return corrupted.astype(np.float32)

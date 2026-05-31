@@ -1,0 +1,20 @@
+{
+  "condition": "dropout_masked_p_0.30",
+  "env": "Walker2d-v5",
+  "reference": "data/references/walker2d_v5_reference_expert_seed0_10k.npz",
+  "seed": 0,
+  "total_steps": 50000,
+  "alpha": 5.0,
+  "noise_type": "dropout",
+  "jitter_sigma": 0.0,
+  "dropout_p": 0.3,
+  "dropout_mode": "mask",
+  "use_masked_reward": true,
+  "bias_magnitude": 0.0,
+  "bias_axis": 0,
+  "bias_target": "none",
+  "reward_type": "squared",
+  "huber_delta": 0.05,
+  "policy_path": "results/dropout_masked_p_0.30_seed0_pilot50k/policy.zip",
+  "metrics_path": "results/dropout_masked_p_0.30_seed0_pilot50k/eval_metrics.csv"
+}

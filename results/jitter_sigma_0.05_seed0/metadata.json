@@ -1,0 +1,20 @@
+{
+  "condition": "jitter_sigma_0.05",
+  "env": "Walker2d-v5",
+  "reference": "data/references/walker2d_v5_reference_expert_seed0_10k.npz",
+  "seed": 0,
+  "total_steps": 200000,
+  "alpha": 5.0,
+  "noise_type": "jitter",
+  "jitter_sigma": 0.05,
+  "dropout_p": 0.0,
+  "dropout_mode": "hold",
+  "use_masked_reward": false,
+  "bias_magnitude": 0.0,
+  "bias_axis": 0,
+  "bias_target": "none",
+  "reward_type": "squared",
+  "huber_delta": 0.05,
+  "policy_path": "results/jitter_sigma_0.05_seed0/policy.zip",
+  "metrics_path": "results/jitter_sigma_0.05_seed0/eval_metrics.csv"
+}
